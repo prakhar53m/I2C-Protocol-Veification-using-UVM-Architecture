@@ -1,0 +1,45 @@
+module i2c_master (
+    input wire clk,
+    input wire rst_n,
+    input wire start,
+    input wire [6:0] slave_addr,
+    input wire rw_bit, // 0: Write, 1: Read
+    input wire [7:0] data_in,
+    output reg [7:0] data_out,
+    output reg done,
+    output reg ack_error,
+    inout wire sda,
+    output wire scl
+);
+
+    typedef enum logic [3:0] {
+        IDLE, START, ADDR, RW, ACK1, DATA, ACK2, STOP
+    } state_t;
+    
+    state_t state, next_state;
+    reg [2:0] bit_cnt;
+    reg sda_out, scl_out;
+    
+    assign sda = sda_out ? 1'bz : 1'b0; // Open-drain drive
+    assign scl = scl_out;
+
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) state <= IDLE;
+        else state <= next_state;
+    end
+
+    always_comb begin
+        next_state = state;
+        case (state)
+            IDLE:  if (start) next_state = START;
+            START: next_state = ADDR;
+            ADDR:  if (bit_cnt == 0) next_state = RW;
+            RW:    next_state = ACK1;
+            ACK1:  if (!sda) next_state = DATA; else next_state = STOP; // sda=0 is ACK
+            DATA:  if (bit_cnt == 0) next_state = ACK2;
+            ACK2:  next_state = STOP;
+            STOP:  next_state = IDLE;
+        endcase
+    end
+    
+endmodule
